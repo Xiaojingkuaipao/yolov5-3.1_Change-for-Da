@@ -34,7 +34,63 @@ class Conv(nn.Module):
 
     def fuseforward(self, x):
         return self.act(self.conv(x))
+    
+    
+class TransformerLayer(nn.Module):
+    # Transformer layer https://arxiv.org/abs/2010.11929 (LayerNorm layers removed for better performance)
+    def __init__(self, c, num_heads):
+        super().__init__()
+        self.q = nn.Linear(c, c, bias=False)
+        self.k = nn.Linear(c, c, bias=False)
+        self.v = nn.Linear(c, c, bias=False)
+        self.ma = nn.MultiheadAttention(embed_dim=c, num_heads=num_heads)
+        self.fc1 = nn.Linear(c, c, bias=False)
+        self.fc2 = nn.Linear(c, c, bias=False)
 
+    def forward(self, x):
+        x = self.ma(self.q(x), self.k(x), self.v(x))[0] + x
+        x = self.fc2(self.fc1(x)) + x
+        return x
+
+
+class TransformerBlock(nn.Module):
+    # Vision Transformer https://arxiv.org/abs/2010.11929
+    def __init__(self, c1, c2, num_heads, num_layers):
+        super().__init__()
+        self.conv = None
+        if c1 != c2:
+            self.conv = Conv(c1, c2)
+        self.linear = nn.Linear(c2, c2)  # learnable position embedding
+        self.tr = nn.Sequential(*[TransformerLayer(c2, num_heads) for _ in range(num_layers)])
+        self.c2 = c2
+
+    def forward(self, x):
+        if self.conv is not None:
+            x = self.conv(x)
+        b, _, w, h = x.shape
+        p = x.flatten(2).unsqueeze(0).transpose(0, 3).squeeze(3)
+        return self.tr(p + self.linear(p)).unsqueeze(3).transpose(0, 3).reshape(b, self.c2, w, h)
+
+
+class C3(nn.Module):
+    # CSP Bottleneck with 3 convolutions
+    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):  # ch_in, ch_out, number, shortcut, groups, expansion
+        super(C3, self).__init__()
+        c_ = int(c2 * e)  # hidden channels
+        self.cv1 = Conv(c1, c_, 1, 1)
+        self.cv2 = Conv(c1, c_, 1, 1)
+        self.cv3 = Conv(2 * c_, c2, 1)  # act=FReLU(c2)
+        self.m = nn.Sequential(*[Bottleneck(c_, c_, shortcut, g, e=1.0) for _ in range(n)])
+        # self.m = nn.Sequential(*[CrossConv(c_, c_, 3, 1, g, 1.0, shortcut) for _ in range(n)])
+
+    def forward(self, x):
+        return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), dim=1))
+class C3TR(C3):
+    # C3 module with TransformerBlock()
+    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):
+        super().__init__(c1, c2, n, shortcut, g, e)
+        c_ = int(c2 * e)
+        self.m = TransformerBlock(c_, c_, 4, n)
 
 class Bottleneck(nn.Module):
     # Standard bottleneck
@@ -104,11 +160,11 @@ class Concat(nn.Module):
 
 class NMS(nn.Module):
     # Non-Maximum Suppression (NMS) module
-    conf = 0.25  # confidence threshold
-    iou = 0.45  # IoU threshold
+    conf = 0.3  # confidence threshold
+    iou = 0.6  # IoU threshold
     classes = None  # (optional list) filter by class
 
-    def __init__(self):
+    def __init__(self, dimension=1):
         super(NMS, self).__init__()
 
     def forward(self, x):
