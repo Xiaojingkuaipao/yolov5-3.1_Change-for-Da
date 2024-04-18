@@ -14,7 +14,7 @@ import torch.nn as nn
 
 from models.common import Conv, Bottleneck, SPP, DWConv, Focus, BottleneckCSP, Concat, NMS, autoShape
 from models.experimental import MixConv2d, CrossConv, C3
-from utils.general import check_anchor_order, make_divisible, check_file, set_logging
+from utils.general import check_anchor_order, make_divisible, check_file, set_logging, feature_visualization
 from utils.torch_utils import time_synchronized, fuse_conv_and_bn, model_info, scale_img, initialize_weights, \
     select_device, copy_attr
 
@@ -38,6 +38,7 @@ class Detect(nn.Module):
     def forward(self, x):
         # x = x.copy()  # for profiling
         z = []  # inference output
+        logits_ = []
         self.training |= self.export
         for i in range(self.nl):
             x[i] = self.m[i](x[i])  # conv
@@ -48,12 +49,15 @@ class Detect(nn.Module):
                 if self.grid[i].shape[2:4] != x[i].shape[2:4]:
                     self.grid[i] = self._make_grid(nx, ny).to(x[i].device)
 
+                logits = x[i][..., 5:]
                 y = x[i].sigmoid()
                 y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i].to(x[i].device)) * self.stride[i]  # xy
                 y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
                 z.append(y.view(bs, -1, self.no))
+                logits_.append(logits.view(bs, -1, self.no - 5))
 
-        return x if self.training else (torch.cat(z, 1), x)
+        # return x if self.training else (torch.cat(z, 1), x)
+        return x if self.training else (torch.cat(z, 1), torch.cat(logits_, 1), x)
 
     @staticmethod
     def _make_grid(nx=20, ny=20):
@@ -61,6 +65,7 @@ class Detect(nn.Module):
         return torch.stack((xv, yv), 2).view((1, 1, ny, nx, 2)).float()
 
 
+temp=[]
 class Model(nn.Module):
     def __init__(self, cfg='yolov5s.yaml', ch=3, nc=None):  # model, input channels, number of classes
         super(Model, self).__init__()
@@ -83,6 +88,7 @@ class Model(nn.Module):
         m = self.model[-1]  # Detect()
         if isinstance(m, Detect):
             s = 128  # 2x min stride
+            # re, _ = self.forward(torch.zeros(1, ch, s, s))
             m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward
             m.anchors /= m.stride.view(-1, 1, 1)
             check_anchor_order(m)
@@ -116,7 +122,7 @@ class Model(nn.Module):
             return self.forward_once(x, profile)  # single-scale inference, train
 
     def forward_once(self, x, profile=False):
-        y, dt = [], []  # outputs
+        y, dt, temp = [], [], []  # outputs
         for m in self.model:
             if m.f != -1:  # if not from previous layer
                 x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
@@ -135,10 +141,17 @@ class Model(nn.Module):
 
             x = m(x)  # run
             y.append(x if m.i in self.save else None)  # save output
+            if m.i == 4 or m.i ==6 or m.i == 9:
+                feature_vis = True
+                temp.append(x)
+            else:
+                feature_vis = False
+            if m.type == 'models.common.BottleneckCSP' and feature_vis:
+                feature_visualization(x, m.type, m.i)
 
         if profile:
             print('%.1fms total' % sum(dt))
-        return x
+        return x, temp
 
     def _initialize_biases(self, cf=None):  # initialize biases into Detect(), cf is class frequency
         # https://arxiv.org/abs/1708.02002 section 3.3
