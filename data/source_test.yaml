@@ -1,0 +1,6 @@
+train: datasets/source/images/train/
+val: datasets/source/images/val/
+test: datasets/source/images/test/
+nc: 8
+names: ['D00', 'repair', 'Blocky cracks', 'D40', 'D10', 'D20', 'oiling','loose']
+# 两个域的数据集一起输入，需要构造一个dataloader，或者model.train两次串行

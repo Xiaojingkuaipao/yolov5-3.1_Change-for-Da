@@ -1,0 +1,6 @@
+train: datasets/target/images/train/
+val: datasets/target/images/val/
+test: datasets/target/images/test/
+nc: 4
+names: ['D00','D10','D20','D40']
+# 两个域的数据集一起输入，需要构造一个dataloader，或者model.train两次串行
