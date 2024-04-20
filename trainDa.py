@@ -404,12 +404,12 @@ def train(hyp, opt, device, tb_writer=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default='yolov5s.pt', help='initial weights path')
-    parser.add_argument('--cfg', type=str, default='', help='model.yaml path')  # 模型的配置文件
-    parser.add_argument('--data', type=str, default='data/coco128.yaml', help='data.yaml path')
-    parser.add_argument('--data_target', type=str, default='data/coco128.yaml', help='data.yaml path')  # 目标域数据集
+    parser.add_argument('--weights', type=str, default='yolov5x.pt', help='initial weights path')
+    parser.add_argument('--cfg', type=str, default='models/yolov5x.yaml', help='model.yaml path')  # 模型的配置文件
+    parser.add_argument('--data', type=str, default='data/source_test.yaml', help='data.yaml path')
+    parser.add_argument('--data_target', type=str, default='data/target_test.yaml', help='data.yaml path')  # 目标域数据集
     parser.add_argument('--hyp', type=str, default='data/hyp.scratch.yaml', help='hyperparameters path')
-    parser.add_argument('--epochs', type=int, default=300)
+    parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--batch-size', type=int, default=4, help='total batch size for all GPUs')
     parser.add_argument('--img-size', nargs='+', type=int, default=[640, 640], help='[train, test] image sizes')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
