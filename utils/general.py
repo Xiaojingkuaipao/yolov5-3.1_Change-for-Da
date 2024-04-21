@@ -24,11 +24,10 @@ from scipy.cluster.vq import kmeans
 from scipy.signal import butter, filtfilt
 from tqdm import tqdm
 
-# from utils.google_utils import gsutil_getsize
-# from utils.torch_utils import is_parallel, init_torch_seeds
 
-import utils.google_utils
-import utils.torch_utils
+from google_utils import gsutil_getsize
+from torch_utils import is_parallel, init_torch_seeds
+
 
 
 # Set printoptions
