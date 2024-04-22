@@ -22,7 +22,6 @@
 
 *.cfg
 !cfg/yolov3*.cfg
-datasets
 storage.googleapis.com
 runs/*
 !data/samples/zidane.jpg
